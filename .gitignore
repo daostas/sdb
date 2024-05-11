@@ -1,0 +1,4 @@
+*.exe
+.idea
+*.log
+t_test.go
