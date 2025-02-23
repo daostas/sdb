@@ -13,10 +13,6 @@ const (
 	InformationSchemaColumns = "information_schema.columns"
 )
 
-type DigitConstraints interface {
-	int | int8 | int16 | int32 | int64
-}
-
 type ModelTable interface {
 	Table() string
 }
