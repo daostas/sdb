@@ -224,11 +224,15 @@ func parseValue(value interface{}) (s string) {
 	case reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Interface, reflect.Slice, reflect.Array:
 		if value != nil && !v.IsNil() {
 			s = ValueToPostgresValue(reflect.Indirect(v).Interface())
+		} else {
+			s = "null"
 		}
 	default:
 		s = fmt.Sprintf("%v", value)
 		if value != nil && s != "<nil>" {
 			s = ValueToPostgresValue(reflect.Indirect(v).Interface())
+		} else {
+			s = "null"
 		}
 	}
 	return

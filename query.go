@@ -3,6 +3,7 @@ package sdb
 import (
 	"fmt"
 	"gorm.io/gorm"
+	"reflect"
 	"strconv"
 )
 
@@ -138,13 +139,38 @@ func (q *query[Model, Out]) setOffset(offset interface{}) *query[Model, Out] {
 	return q
 }
 
-func (q *query[Model, Out]) setValues(values Map) *query[Model, Out] {
+func (q *query[Model, Out]) setValues(values Map, ignoreNull ...bool) *query[Model, Out] {
 	if q.values == nil {
 		q.values = make(map[string]string)
 	}
 
-	for k, v := range values {
-		q.values[k] = parseValue(v)
+	ignore := false
+	if len(ignoreNull) != 0 {
+		ignore = ignoreNull[0]
+	}
+
+	for k, value := range values {
+		v := reflect.ValueOf(value)
+		switch v.Kind() {
+		case reflect.Chan, reflect.Func:
+		case reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Interface, reflect.Slice, reflect.Array:
+			if value != nil && !v.IsNil() {
+				q.values[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
+			} else {
+				if !ignore {
+					q.values[k] = "null"
+				}
+			}
+		default:
+			s := fmt.Sprintf("%v", value)
+			if value != nil && s != "<nil>" {
+				q.values[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
+			} else {
+				if !ignore {
+					q.values[k] = "null"
+				}
+			}
+		}
 	}
 	return q
 }
