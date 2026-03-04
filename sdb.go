@@ -2,25 +2,30 @@ package sdb
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/daostas/slogger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"strings"
-	"time"
 )
 
 const (
 	InformationSchemaColumns = "information_schema.columns"
 )
 
+type DigitConstraints interface {
+	int | int8 | int16 | int32 | int64
+}
+
 type ModelTable interface {
 	Table() string
 }
 
 type Sdb struct {
-	db     *gorm.DB
-	logger slogger.Logger
-	log    bool
+	db        *gorm.DB
+	logger    slogger.Logger
+	log       bool
+	logInFile bool
 }
 
 type DbConfig struct {
@@ -31,11 +36,12 @@ type DbConfig struct {
 	Name                   string `yaml:"name" json:"name"`
 	Ssl                    bool   `yaml:"ssl" json:"ssl"`
 	SkipDefaultTransaction bool   `yaml:"skip_default_transaction" json:"skip-default-transaction"`
-	MaxIdleConnections     int    `yaml:"max_idle_connections"`
-	MaxOpenConnections     int    `yaml:"max_open_connections"`
-	MaxLifeTime            int    `yaml:"max_life_time"`
-	MaxIdleLifeTime        int    `yaml:"max_idle_life_time"`
+	MaxIdleConnections     int    `yaml:"max_idle_connections" json:"max_idle_connections"`
+	MaxOpenConnections     int    `yaml:"max_open_connections" json:"max_open_connections"`
+	MaxLifeTime            int    `yaml:"max_life_time" json:"max_life_time"`
+	MaxIdleLifeTime        int    `yaml:"max_idle_life_time" json:"max_idle_life_time"`
 	Log                    bool   `yaml:"log" json:"log"`
+	LogInFile              bool   `yaml:"log_in_file" json:"log_in_file"`
 }
 
 func ConnectDb(config DbConfig, prefix string) (db Sdb, err error) {
@@ -54,6 +60,7 @@ func ConnectDb(config DbConfig, prefix string) (db Sdb, err error) {
 	}
 
 	db.log = config.Log
+	db.logInFile = config.LogInFile
 	db.db, err = gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dataSource,
 		PreferSimpleProtocol: true,
@@ -161,20 +168,5 @@ func CallRoutine(sdb Sdb, funcName string, args ...any) (m map[string]interface{
 	}
 
 	err = sdb.db.Raw(query).Scan(&m).Error
-	return
-}
-
-func Columns[Model ModelTable](sdb Sdb, model Model) (res []string, err error) {
-	tableName := model.Table()
-	dotIndex := strings.Index(tableName, ".")
-	schema := tableName[:dotIndex]
-	tableName = tableName[dotIndex+1:]
-
-	query := fmt.Sprintf("SELECT column_name FROM %s WHERE table_schema='%s' and table_name='%s'", InformationSchemaColumns, schema, tableName)
-	if sdb.log {
-		sdb.logger.Info(query)
-	}
-
-	err = sdb.db.Raw(query).Scan(&res).Error
 	return
 }

@@ -3,8 +3,8 @@ module github.com/daostas/sdb
 go 1.23.4
 
 require (
-	github.com/daostas/query_parser v1.0.0
-	github.com/daostas/slogger v1.0.3
+	github.com/daostas/query_parser v1.0.1
+	github.com/daostas/slogger v1.1.0
 	gorm.io/driver/postgres v1.5.11
 	gorm.io/gorm v1.25.12
 )

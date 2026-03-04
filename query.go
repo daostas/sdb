@@ -2,14 +2,13 @@ package sdb
 
 import (
 	"fmt"
-	"gorm.io/gorm"
 	"reflect"
 	"strconv"
 )
 
 type (
-	query[Model ModelTable, Out any] struct {
-		model     Model
+	query[Out any] struct {
+		table     string
 		queryType QueryType
 		fields    interface{}
 		orders    interface{}
@@ -99,33 +98,40 @@ const (
 	routine
 )
 
-func (q *query[Model, Out]) setQuery(db Sdb, model Model, queryType QueryType) {
+func (q *query[Out]) setQuery(db Sdb, table any, queryType QueryType) {
+	if model, ok := table.(ModelTable); ok {
+		q.table = model.Table()
+	} else {
+		switch t := table.(type) {
+		case string:
+			q.table = t
+		}
+	}
 	q.db = db
-	q.model = model
 	q.queryType = queryType
 }
 
-func (q *query[Model, Out]) setFields(fields interface{}) *query[Model, Out] {
+func (q *query[Out]) setFields(fields interface{}) *query[Out] {
 	q.fields = fields
 	return q
 }
 
-func (q *query[Model, Out]) setOrders(orders interface{}) *query[Model, Out] {
+func (q *query[Out]) setOrders(orders interface{}) *query[Out] {
 	q.orders = orders
 	return q
 }
 
-func (q *query[Model, Out]) setWhere(where interface{}) *query[Model, Out] {
+func (q *query[Out]) setWhere(where interface{}) *query[Out] {
 	q.where = where
 	return q
 }
 
-func (q *query[Model, Out]) setLimit(limit interface{}) *query[Model, Out] {
+func (q *query[Out]) setLimit(limit interface{}) *query[Out] {
 	q.limit = limit
 	return q
 }
 
-func (q *query[Model, Out]) setOffset(offset interface{}) *query[Model, Out] {
+func (q *query[Out]) setOffset(offset interface{}) *query[Out] {
 	if offset == nil {
 		q.offset = 0
 	} else {
@@ -139,7 +145,7 @@ func (q *query[Model, Out]) setOffset(offset interface{}) *query[Model, Out] {
 	return q
 }
 
-func (q *query[Model, Out]) setValues(values Map, ignoreNull ...bool) *query[Model, Out] {
+func (q *query[Out]) setValues(values Map, ignoreNull ...bool) *query[Out] {
 	if q.values == nil {
 		q.values = make(map[string]string)
 	}
@@ -175,42 +181,75 @@ func (q *query[Model, Out]) setValues(values Map, ignoreNull ...bool) *query[Mod
 	return q
 }
 
-func (q *query[Model, Out]) exec() (out Out, err error) {
+func (q *query[Out]) exec() (out Out, err error) {
 	query, err := q.getQuery()
 	if err != nil {
 		return
 	}
 
 	if q.db.log {
-		q.db.logger.Info(query)
+		if q.db.logInFile {
+			q.db.logger.InfoFl(query)
+		} else {
+			q.db.logger.Info(query)
+		}
 	}
 
 	switch q.queryType {
 	case create, update, deleteType:
 		err = q.db.db.Exec(query).Error
 	case selectOne:
-		var tempOut []*Out
-		err = q.db.db.Raw(query).Scan(&tempOut).Error
-		if err != nil {
-			return
+		t := reflect.TypeOf(out)
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
 		}
-		if len(tempOut) == 0 {
-			err = gorm.ErrRecordNotFound
+
+		if t.Kind() == reflect.Map {
+			var tempOut []Out
+			err = q.db.db.Raw(query).Scan(&tempOut).Error
+			if err != nil {
+				return
+			}
+			if len(tempOut) == 0 {
+				err = ErrRecordNotFound
+			} else {
+				out = tempOut[0]
+			}
 		} else {
-			out = *tempOut[0]
+			var tempOut []*Out
+			err = q.db.db.Raw(query).Scan(&tempOut).Error
+			if err != nil {
+				return
+			}
+			if len(tempOut) == 0 {
+				err = ErrRecordNotFound
+			} else {
+				out = *tempOut[0]
+			}
 		}
 	default:
 		err = q.db.db.Raw(query).Scan(&out).Error
 	}
+
+	if err != nil {
+		if q.db.log {
+			if q.db.logInFile {
+				q.db.logger.ErrorFl(err)
+			} else {
+				q.db.logger.Err(err)
+			}
+		}
+	}
 	return
 }
 
-func (q query[Model, Out]) getQuery() (s string, err error) {
+func (q query[Out]) getQuery() (s string, err error) {
 	s = queryTypeMap[q.queryType]
 
 	//Fields
-	fields := parseFields(q.fields)
+	fields, fieldsArray := parseFields(q.fields)
 	if queryTypeConst["fields"][q.queryType] {
+		fields := fields
 		if q.queryType == count {
 			if fields != "*" {
 				fields = fmt.Sprintf("(%s)", fields)
@@ -225,7 +264,7 @@ func (q query[Model, Out]) getQuery() (s string, err error) {
 	if queryTypeConst["from"][q.queryType] {
 		s += "FROM "
 	}
-	s += q.model.Table() + " "
+	s += q.table + " "
 
 	//Values
 	if queryTypeConst["values"][q.queryType] {
@@ -262,7 +301,7 @@ func (q query[Model, Out]) getQuery() (s string, err error) {
 
 	//Where
 	if queryTypeConst["where"][q.queryType] {
-		where, err := parseWhere(q.db, q.model, fields, q.where)
+		where, err := parseWhere(q.db, q.table, fieldsArray, q.where)
 		if err != nil {
 			return s, err
 		}

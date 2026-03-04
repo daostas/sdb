@@ -1,30 +1,30 @@
 package sdb
 
-type UpdateSelectOneQuery[Model ModelTable, Out any] struct {
-	query query[Model, Out]
+type UpdateSelectOneQuery[Out any] struct {
+	query query[Out]
 }
 
-func UpdateSelectOne[Model ModelTable](db Sdb, model Model) (q UpdateSelectOneQuery[Model, Model]) {
+func UpdateSelectOne[Model ModelTable](db Sdb, model Model) (q UpdateSelectOneQuery[Model]) {
 	q.query.setQuery(db, model, updateSelectOne)
 	return
 }
 
-func (q UpdateSelectOneQuery[Model, Out]) Fields(fields interface{}) UpdateSelectOneQuery[Model, Out] {
+func (q UpdateSelectOneQuery[Out]) Fields(fields interface{}) UpdateSelectOneQuery[Out] {
 	q.query.setFields(fields)
 	return q
 }
 
-func (q UpdateSelectOneQuery[Model, Out]) Values(values Map) UpdateSelectOneQuery[Model, Out] {
-	q.query.setValues(values)
+func (q UpdateSelectOneQuery[Out]) Values(values Map, ignoreNull ...bool) UpdateSelectOneQuery[Out] {
+	q.query.setValues(values, ignoreNull...)
 	return q
 }
 
-func (q UpdateSelectOneQuery[Model, Out]) Where(where interface{}) UpdateSelectOneQuery[Model, Out] {
+func (q UpdateSelectOneQuery[Out]) Where(where interface{}) UpdateSelectOneQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }
 
-func (q UpdateSelectOneQuery[Model, Out]) Exec() (out Out, err error) {
+func (q UpdateSelectOneQuery[Out]) Exec() (out Out, err error) {
 	out, err = q.query.exec()
 	return
 }

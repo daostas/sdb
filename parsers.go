@@ -3,16 +3,18 @@ package sdb
 import (
 	"encoding/json"
 	"fmt"
-	qp "github.com/daostas/query_parser"
 	"reflect"
+	"regexp"
 	"strings"
+
+	qp "github.com/daostas/query_parser"
 )
 
-func parseQueryParam[Model ModelTable](sdb Sdb, model Model, fields string, param qp.QueryParam) (result string, err error) {
+func parseQueryParam(sdb Sdb, table string, fields []string, param qp.QueryParam) (result string, err error) {
 	if param.Key == "*" {
-		if fields == "*" {
+		if fields[0] == "*" {
 
-			columns, err := Columns(sdb, model)
+			columns, err := ColumnsByTable(sdb, table)
 			if err != nil {
 				return "", err
 			}
@@ -25,19 +27,18 @@ func parseQueryParam[Model ModelTable](sdb Sdb, model Model, fields string, para
 				} else if i < len(columns) {
 					result += " or "
 				}
-				result += fmt.Sprintf("%s%s %s %s", column, param.Type, param.Sign, param.Value)
+				result += fmt.Sprintf(`"%s"%s %s %s`, column, param.Type, param.Sign, param.Value)
 			}
 			result += ")"
 
 		} else {
-			arr := strings.Split(fields, ",")
-			for i, v := range arr {
+			for i, v := range fields {
 				if i == 0 {
 					result += "("
-				} else if i < len(arr) {
+				} else {
 					result += " or "
 				}
-				result += fmt.Sprintf("%s%s %s %s", v, param.Type, param.Sign, param.Value)
+				result += fmt.Sprintf(`%s%s %s %s`, v, param.Type, param.Sign, param.Value)
 			}
 			result += ")"
 		}
@@ -78,9 +79,9 @@ func parseQueryParam[Model ModelTable](sdb Sdb, model Model, fields string, para
 //	return
 //}
 
-func parseQueryParams[Model ModelTable](sdb Sdb, model Model, fields string, params qp.QueryParams) (result string, err error) {
+func parseQueryParams(sdb Sdb, table string, fields []string, params qp.QueryParams) (result string, err error) {
 	for _, param := range params {
-		str, err := parseQueryParam(sdb, model, fields, param)
+		str, err := parseQueryParam(sdb, table, fields, param)
 		if err != nil {
 			return "", err
 		}
@@ -102,16 +103,16 @@ func ReplaceForSqlQuery(str string, isArray ...bool) string {
 	return str
 }
 
-func MakeSqlWhereFromApiWhere[Model ModelTable](sdb Sdb, model Model, fields string, where interface{}) (result string, err error) {
+func MakeSqlWhereFromApiWhere(sdb Sdb, table string, fields []string, where interface{}) (result string, err error) {
 	switch t := where.(type) {
 	case qp.QueryParams:
-		return parseQueryParams(sdb, model, fields, t)
+		return parseQueryParams(sdb, table, fields, t)
 	case *qp.QueryParams:
-		return parseQueryParams(sdb, model, fields, *t)
+		return parseQueryParams(sdb, table, fields, *t)
 	case qp.QueryParam:
-		return parseQueryParam(sdb, model, fields, t)
+		return parseQueryParam(sdb, table, fields, t)
 	case *qp.QueryParam:
-		return parseQueryParam(sdb, model, fields, *t)
+		return parseQueryParam(sdb, table, fields, *t)
 	}
 	return
 }
@@ -137,10 +138,12 @@ func ValueToPostgresValue(arg interface{}, isArray ...bool) (str string) {
 		case reflect.Slice, reflect.Array:
 			str += "'{"
 			for i := 0; i < v.Len(); i++ {
-				temp := ValueToPostgresValue(v.Index(i).Interface(), true)
-				str += temp + ","
+				if i != 0 {
+					str += ","
+				}
+				str += ValueToPostgresValue(v.Index(i).Interface(), true)
 			}
-			str = str[:len(str)-1] + "}'"
+			str += "}'"
 		default:
 			str = fmt.Sprint(v)
 		}
@@ -148,38 +151,50 @@ func ValueToPostgresValue(arg interface{}, isArray ...bool) (str string) {
 	return
 }
 
-func parseFields(fields interface{}) (res string) {
+func parseFields(fields interface{}) (res string, resArray []string) {
 	if fields != nil {
 		switch t := fields.(type) {
 		case []string:
-			for _, v := range t {
-				res += fmt.Sprintf("%v, ", v)
-			}
-			if res != "" {
-				res = res[:len(res)-2]
+			for i, v := range t {
+				if i != 0 {
+					res += ", "
+				}
+				v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+				res += v
+				resArray = append(resArray, v)
 			}
 		case string:
+			t = fmt.Sprintf(`"%s"`, strings.ReplaceAll(t, `"`, `""`))
 			res = t
+			resArray = append(resArray, t)
 		}
 	}
 	if fields == nil || len(res) == 0 {
 		res = "*"
+		resArray = append(resArray, "*")
 	}
 	return
 }
 
 func parseOrders(orders interface{}) (res string) {
 	if orders != nil {
+		r := regexp.MustCompile(`^(\w+)\s*(desc|asc|)$`)
 		switch t := orders.(type) {
 		case []string:
-			for _, v := range t {
-				res += fmt.Sprintf("%v, ", v)
-			}
-			if res != "" {
-				res = res[:len(res)-2]
+			for i, v := range t {
+				if r.MatchString(v) {
+					matches := r.FindStringSubmatch(v)
+					if i != 0 {
+						res += ", "
+					}
+					res += fmt.Sprintf(`"%s" %s`, strings.ReplaceAll(matches[1], `"`, `""`), matches[2])
+				}
 			}
 		case string:
-			res = t
+			if r.MatchString(t) {
+				matches := r.FindStringSubmatch(t)
+				res = fmt.Sprintf(`"%s" %s`, strings.ReplaceAll(matches[1], `"`, `""`), matches[2])
+			}
 		}
 	}
 	return
@@ -192,7 +207,7 @@ func NewWhere(where string, args ...interface{}) string {
 	return where
 }
 
-func parseWhere[Model ModelTable](sdb Sdb, model Model, fields string, where interface{}) (_where string, err error) {
+func parseWhere(sdb Sdb, table string, fields []string, where interface{}) (_where string, err error) {
 	switch t := where.(type) {
 	case string:
 		if len(t) >= 2 {
@@ -203,13 +218,13 @@ func parseWhere[Model ModelTable](sdb Sdb, model Model, fields string, where int
 					return
 				}
 
-				_where, err = MakeSqlWhereFromApiWhere(sdb, model, fields, arr)
+				_where, err = MakeSqlWhereFromApiWhere(sdb, table, fields, arr)
 			} else {
 				_where = t
 			}
 		}
 	case qp.QueryParams, qp.QueryParam, *qp.QueryParams, *qp.QueryParam:
-		_where, err = MakeSqlWhereFromApiWhere(sdb, model, fields, t)
+		_where, err = MakeSqlWhereFromApiWhere(sdb, table, fields, t)
 		if err != nil {
 			return
 		}
