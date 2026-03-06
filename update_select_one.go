@@ -14,8 +14,8 @@ func (q UpdateSelectOneQuery[Out]) Fields(fields interface{}) UpdateSelectOneQue
 	return q
 }
 
-func (q UpdateSelectOneQuery[Out]) Values(values Map, ignoreNull ...bool) UpdateSelectOneQuery[Out] {
-	q.query.setValues(values, ignoreNull...)
+func (q UpdateSelectOneQuery[Out]) Values(values Map, params ...ValuesParam) UpdateSelectOneQuery[Out] {
+	q.query.setValues(values, params...)
 	return q
 }
 

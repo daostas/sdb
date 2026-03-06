@@ -44,7 +44,7 @@ type DbConfig struct {
 	LogInFile              bool   `yaml:"log_in_file" json:"log_in_file"`
 }
 
-func ConnectDb(config DbConfig, prefix string) (db Sdb, err error) {
+func ConnectDb(config DbConfig, logger slogger.Logger, prefix string) (db Sdb, err error) {
 
 	dataSource := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%d",
@@ -81,7 +81,8 @@ func ConnectDb(config DbConfig, prefix string) (db Sdb, err error) {
 	sqlDb.SetConnMaxLifetime(time.Duration(config.MaxLifeTime) * time.Millisecond)
 	sqlDb.SetConnMaxIdleTime(time.Duration(config.MaxIdleLifeTime) * time.Millisecond)
 
-	db.logger = slogger.NewLogger(prefix)
+	logger.AddToPrefix(prefix)
+	db.logger = logger
 	return
 }
 

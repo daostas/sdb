@@ -14,8 +14,8 @@ func (q UpdateSelectAllMapQuery[Out]) Fields(fields interface{}) UpdateSelectAll
 	return q
 }
 
-func (q UpdateSelectAllMapQuery[Out]) Values(values Map, ignoreNull ...bool) UpdateSelectAllMapQuery[Out] {
-	q.query.setValues(values, ignoreNull...)
+func (q UpdateSelectAllMapQuery[Out]) Values(values Map, params ...ValuesParam) UpdateSelectAllMapQuery[Out] {
+	q.query.setValues(values, params...)
 	return q
 }
 

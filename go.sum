@@ -1,8 +1,6 @@
-github.com/daostas/query_parser v1.0.0 h1:AfiVfN7ag2N6ybnLAXp4dpVSoS0UyN6lgJHeauzndoE=
-github.com/daostas/query_parser v1.0.0/go.mod h1:+OpJV0DeF+i3o+EQI+kAvnrlWqgQKRmvBS9nxa0vUrk=
+github.com/daostas/query_parser v1.0.1 h1:Rw7lSmnL9we0FSwJRxxKsIs/y4r9iimtR6Y5L9Z1zc0=
 github.com/daostas/query_parser v1.0.1/go.mod h1:YEuaRd/lSldSw5d/uYsppI10KhAGzEnn/8wlqwfht5I=
-github.com/daostas/slogger v1.0.3 h1:8ATxo4ob0rQ4pqumGA8FIzvxet1kIxcQn2Jv/yoGijc=
-github.com/daostas/slogger v1.0.3/go.mod h1:6qZe5hAASg8iB/n31CCJ+oyaJ54V0BW86SmDeXnLvMg=
+github.com/daostas/slogger v1.1.0 h1:W02iotpfnmDtX6+e1X2UXpsum6N7zB8wozf09aqdsCw=
 github.com/daostas/slogger v1.1.0/go.mod h1:6qZe5hAASg8iB/n31CCJ+oyaJ54V0BW86SmDeXnLvMg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=

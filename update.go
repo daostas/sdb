@@ -9,8 +9,9 @@ func Update[Model ModelTable](db Sdb, model Model) (q UpdateQuery[Model]) {
 	return
 }
 
-func (q UpdateQuery[Out]) Values(values Map, ignoreNull ...bool) UpdateQuery[Out] {
-	q.query.setValues(values, ignoreNull...)
+func (q UpdateQuery[Out]) Values(values Map, params ...ValuesParam) UpdateQuery[Out] {
+	params = append(params, OptimizeUpdate)
+	q.query.setValues(values, params...)
 	return q
 }
 

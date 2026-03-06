@@ -8,19 +8,27 @@ import (
 
 type (
 	query[Out any] struct {
-		table     string
-		queryType QueryType
-		fields    interface{}
-		orders    interface{}
-		where     interface{}
-		limit     interface{}
-		offset    interface{}
-		values    map[string]string
-		db        Sdb
+		table            string
+		queryType        QueryType
+		fields           interface{}
+		orders           interface{}
+		where            interface{}
+		limit            interface{}
+		offset           interface{}
+		values           map[string]string
+		updateValues     map[string]string
+		conflict         interface{}
+		doNothing        bool
+		exclude          bool
+		optimizeUpdate   bool
+		ignoreNullValues bool
+		db               Sdb
 	}
 
-	Map       map[string]interface{}
-	QueryType int
+	Map           map[string]interface{}
+	QueryType     int
+	ConflictParam int
+	ValuesParam   int
 )
 
 var (
@@ -29,6 +37,9 @@ var (
 		selectOne:       "SELECT ",
 		create:          "INSERT INTO ",
 		createSelect:    "INSERT INTO ",
+		upsert:          "INSERT INTO ",
+		upsertSelectAll: "INSERT INTO ",
+		upsertSelectOne: "INSERT INTO ",
 		update:          "UPDATE ",
 		updateSelectAll: "UPDATE ",
 		updateSelectOne: "UPDATE ",
@@ -58,6 +69,9 @@ var (
 			updateSelectOne: true,
 			deleteType:      true,
 			count:           true,
+			upsert:          true,
+			upsertSelectAll: true,
+			upsertSelectOne: true,
 		},
 		"limit": {
 			selectAll: true,
@@ -71,6 +85,7 @@ var (
 			update:          true,
 			updateSelectAll: true,
 			updateSelectOne: true,
+			upsert:          true,
 		},
 		"set": {
 			update:          true,
@@ -81,6 +96,12 @@ var (
 			createSelect:    true,
 			updateSelectAll: true,
 			updateSelectOne: true,
+		},
+		"on conflict": {
+			upsert: true,
+		},
+		"set1": {
+			upsert: true,
 		},
 	}
 )
@@ -96,6 +117,19 @@ const (
 	deleteType
 	count
 	routine
+	upsert
+	upsertSelectAll
+	upsertSelectOne
+)
+
+const (
+	DoNothing ConflictParam = iota
+	Excluded
+)
+
+const (
+	IgnoreNullValues ValuesParam = iota
+	OptimizeUpdate
 )
 
 func (q *query[Out]) setQuery(db Sdb, table any, queryType QueryType) {
@@ -145,15 +179,27 @@ func (q *query[Out]) setOffset(offset interface{}) *query[Out] {
 	return q
 }
 
-func (q *query[Out]) setValues(values Map, ignoreNull ...bool) *query[Out] {
+func (q *query[Out]) setValues(values Map, params ...ValuesParam) *query[Out] {
 	if q.values == nil {
 		q.values = make(map[string]string)
 	}
+	q.setValuesParams(params...)
 
-	ignore := false
-	if len(ignoreNull) != 0 {
-		ignore = ignoreNull[0]
+	q._setValues(q.values, values)
+	return q
+}
+
+func (q *query[Out]) setUpdateValues(updateValues Map, params ...ValuesParam) *query[Out] {
+	if q.updateValues == nil {
+		q.updateValues = make(map[string]string)
 	}
+
+	q._setValues(q.updateValues, updateValues)
+
+	return q
+}
+
+func (q *query[Out]) _setValues(dest map[string]string, values Map) {
 
 	for k, value := range values {
 		v := reflect.ValueOf(value)
@@ -161,23 +207,54 @@ func (q *query[Out]) setValues(values Map, ignoreNull ...bool) *query[Out] {
 		case reflect.Chan, reflect.Func:
 		case reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Interface, reflect.Slice, reflect.Array:
 			if value != nil && !v.IsNil() {
-				q.values[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
+				dest[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
 			} else {
-				if !ignore {
-					q.values[k] = "null"
+				if !q.ignoreNullValues {
+					dest[k] = "null"
 				}
 			}
 		default:
 			s := fmt.Sprintf("%v", value)
 			if value != nil && s != "<nil>" {
-				q.values[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
+				dest[k] = ValueToPostgresValue(reflect.Indirect(v).Interface())
 			} else {
-				if !ignore {
-					q.values[k] = "null"
+				if !q.ignoreNullValues {
+					dest[k] = "null"
 				}
 			}
 		}
 	}
+}
+
+func (q *query[Out]) setConflict(conflict interface{}, params ...ConflictParam) *query[Out] {
+	q.conflict = conflict
+	q.setConflictParams(params...)
+	return q
+}
+
+func (q *query[Out]) setValuesParams(params ...ValuesParam) *query[Out] {
+	for _, v := range params {
+		switch v {
+		case IgnoreNullValues:
+			q.ignoreNullValues = true
+		case OptimizeUpdate:
+			q.optimizeUpdate = true
+		}
+	}
+
+	return q
+}
+
+func (q *query[Out]) setConflictParams(params ...ConflictParam) *query[Out] {
+	for _, v := range params {
+		switch v {
+		case DoNothing:
+			q.doNothing = true
+		case Excluded:
+			q.exclude = true
+		}
+	}
+
 	return q
 }
 
@@ -266,37 +343,74 @@ func (q query[Out]) getQuery() (s string, err error) {
 	}
 	s += q.table + " "
 
+	conflict, conflictArray := parseFields(q.conflict)
 	//Values
-	if queryTypeConst["values"][q.queryType] {
-		i := 0
-		if queryTypeConst["set"][q.queryType] {
-			s += "SET "
-			for k, v := range q.values {
-				if i != 0 {
-					s += ", "
+	for round := 0; round < 2; round++ {
+		if queryTypeConst["on conflict"][q.queryType] {
+			if round == 1 {
+				s += fmt.Sprintf("ON CONFLICT (%s) ", conflict)
+				if q.doNothing {
+					s += "DO NOTHING "
+					continue
 				}
-				s += fmt.Sprintf("%s = %s", k, v)
-				i++
 			}
-			s += " "
-		} else {
-			var (
-				template = "("
-				values   = "("
-			)
-			for k, v := range q.values {
-				if i != 0 {
-					template += ", "
-					values += ", "
-				}
-				template += k
-				values += v
-				i++
-			}
-			template += ")"
-			values += ")"
-			s += fmt.Sprintf("%s VALUES %s ", template, values)
+		} else if round == 1 {
+			continue
 		}
+
+		if queryTypeConst["values"][q.queryType] {
+			i := 0
+			if queryTypeConst["set"][q.queryType] || (queryTypeConst["set1"][q.queryType] && round == 1) {
+
+				if round == 1 {
+					s += "DO UPDATE "
+					if q.updateValues != nil {
+						q.values = q.updateValues
+					}
+				}
+
+				s += "SET "
+			valueLoop:
+				for k, v := range q.values {
+					if i != 0 {
+						s += ", "
+					}
+					if round == 1 {
+						for _, field := range conflictArray {
+							if field == fmt.Sprintf(`"%s"`, k) {
+								delete(q.values, k)
+								continue valueLoop
+							}
+						}
+
+						if q.exclude {
+							v = fmt.Sprintf("EXCLUDED.%s", k)
+						}
+					}
+					s += fmt.Sprintf("%s = %s", k, v)
+					i++
+				}
+				s += " "
+			} else {
+				var (
+					template = "("
+					values   = "("
+				)
+				for k, v := range q.values {
+					if i != 0 {
+						template += ", "
+						values += ", "
+					}
+					template += k
+					values += v
+					i++
+				}
+				template += ")"
+				values += ")"
+				s += fmt.Sprintf("%s VALUES %s ", template, values)
+			}
+		}
+
 	}
 
 	//Where
@@ -306,8 +420,46 @@ func (q query[Out]) getQuery() (s string, err error) {
 			return s, err
 		}
 		if where != "" {
+			if q.optimizeUpdate && (queryTypeConst["set"][q.queryType] || queryTypeConst["set1"][q.queryType]) {
+				where = fmt.Sprintf("(%s)", where)
+			}
 			s += "WHERE " + where + " "
 		}
+
+		if (queryTypeConst["set"][q.queryType] || queryTypeConst["set1"][q.queryType]) && len(q.values) != 0 && q.optimizeUpdate {
+			keys, values := "(", "("
+			i := 0
+			for k, v := range q.values {
+				if q.exclude {
+					v = fmt.Sprintf("EXCLUDED.%s", k)
+				}
+
+				if i != 0 {
+					keys += ", "
+					values += ", "
+				}
+
+				if queryTypeConst["set1"][q.queryType] {
+					keys += fmt.Sprintf("%s.%s", q.table, k)
+				} else {
+					keys += k
+				}
+
+				values += v
+				i++
+			}
+			keys += ")"
+			values += ")"
+
+			if where == "" {
+				s += "WHERE "
+			} else {
+				s += "and "
+			}
+
+			s += fmt.Sprintf("(%s IS DISTINCT FROM %s) ", keys, values)
+		}
+
 	}
 
 	//Orders
