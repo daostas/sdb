@@ -372,9 +372,6 @@ func (q query[Out]) getQuery() (s string, err error) {
 				s += "SET "
 			valueLoop:
 				for k, v := range q.values {
-					if i != 0 {
-						s += ", "
-					}
 					if round == 1 {
 						for _, field := range conflictArray {
 							if field == fmt.Sprintf(`"%s"`, k) {
@@ -386,6 +383,10 @@ func (q query[Out]) getQuery() (s string, err error) {
 						if q.exclude {
 							v = fmt.Sprintf("EXCLUDED.%s", k)
 						}
+
+					}
+					if i != 0 {
+						s += ", "
 					}
 					s += fmt.Sprintf("%s = %s", k, v)
 					i++
