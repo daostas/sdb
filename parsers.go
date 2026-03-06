@@ -164,9 +164,20 @@ func parseFields(fields interface{}) (res string, resArray []string) {
 				resArray = append(resArray, v)
 			}
 		case string:
-			t = fmt.Sprintf(`"%s"`, strings.ReplaceAll(t, `"`, `""`))
-			res = t
-			resArray = append(resArray, t)
+			reg := regexp.MustCompile(`\s*,\s*`)
+			matches := reg.Split(t, -1)
+			if matches != nil {
+				for i, v := range matches {
+					if i != 0 {
+						res += ", "
+					}
+
+					v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+					res += v
+					resArray = append(resArray, v)
+				}
+			}
+
 		}
 	}
 	if fields == nil || len(res) == 0 {
