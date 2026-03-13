@@ -178,7 +178,7 @@ func parseFields(fields interface{}) (res string, resArray []string) {
 		}
 	}
 
-	if fields == nil || len(res) == 0 {
+	if fields == nil || len(resArray) == 0 {
 		res = "*"
 		resArray = append(resArray, "*")
 	}
@@ -189,7 +189,7 @@ func parseDistinct(distinct interface{}) (res string) {
 	if distinct != nil {
 		switch t := distinct.(type) {
 		case []string:
-			res, _ = parseFields(t)
+			res, _ = _parseFields(t)
 		case string:
 			reg := regexp.MustCompile(`\s*,\s*`)
 			matches := reg.Split(t, -1)
