@@ -9,6 +9,11 @@ func SelectAllMap[Model any](db Sdb, model Model) (q SelectAllMapQuery[[]map[str
 	return
 }
 
+func (q SelectAllMapQuery[Out]) Distinct(distinct interface{}) SelectAllMapQuery[Out] {
+	q.query.setDistinct(distinct)
+	return q
+}
+
 func (q SelectAllMapQuery[Out]) Fields(fields interface{}) SelectAllMapQuery[Out] {
 	q.query.setFields(fields)
 	return q
