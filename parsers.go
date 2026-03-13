@@ -168,7 +168,7 @@ func parseFields(fields interface{}) (res string, resArray []string) {
 	if fields != nil {
 		switch t := fields.(type) {
 		case []string:
-			return parseFields(t)
+			return _parseFields(t)
 		case string:
 			reg := regexp.MustCompile(`\s*,\s*`)
 			matches := reg.Split(t, -1)
