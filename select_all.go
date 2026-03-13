@@ -9,6 +9,11 @@ func SelectAll[Model ModelTable](db Sdb, model Model) (q SelectAllQuery[[]*Model
 	return
 }
 
+func (q SelectAllQuery[Out]) Distinct(distinct interface{}) SelectAllQuery[Out] {
+	q.query.setDistinct(distinct)
+	return q
+}
+
 func (q SelectAllQuery[Out]) Fields(fields interface{}) SelectAllQuery[Out] {
 	q.query.setFields(fields)
 	return q

@@ -10,6 +10,7 @@ type (
 	query[Out any] struct {
 		table            string
 		queryType        QueryType
+		distinct         interface{}
 		fields           interface{}
 		orders           interface{}
 		where            interface{}
@@ -47,6 +48,9 @@ var (
 		count:           "SELECT COUNT(%s)",
 	}
 	queryTypeConst = map[string]map[QueryType]bool{
+		"distinct": {
+			selectAll: true,
+		},
 		"fields": {
 			selectAll: true,
 			selectOne: true,
@@ -143,6 +147,11 @@ func (q *query[Out]) setQuery(db Sdb, table any, queryType QueryType) {
 	}
 	q.db = db
 	q.queryType = queryType
+}
+
+func (q *query[Out]) setDistinct(distinct interface{}) *query[Out] {
+	q.distinct = distinct
+	return q
 }
 
 func (q *query[Out]) setFields(fields interface{}) *query[Out] {
@@ -322,6 +331,14 @@ func (q *query[Out]) exec() (out Out, err error) {
 
 func (q query[Out]) getQuery() (s string, err error) {
 	s = queryTypeMap[q.queryType]
+
+	//Distinct
+	if queryTypeConst["distinct"][q.queryType] {
+		distinct := parseDistinct(q.distinct)
+		if distinct != "" {
+			s += fmt.Sprintf("DISTINCT ON (%s) ", distinct)
+		}
+	}
 
 	//Fields
 	fields, fieldsArray := parseFields(q.fields)

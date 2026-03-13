@@ -151,39 +151,54 @@ func ValueToPostgresValue(arg interface{}, isArray ...bool) (str string) {
 	return
 }
 
+func _parseFields(fields []string) (res string, resArray []string) {
+	for i, v := range fields {
+		if i != 0 {
+			res += ", "
+		}
+
+		v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+		res += v
+		resArray = append(resArray, v)
+	}
+	return
+}
+
 func parseFields(fields interface{}) (res string, resArray []string) {
 	if fields != nil {
 		switch t := fields.(type) {
 		case []string:
-			for i, v := range t {
-				if i != 0 {
-					res += ", "
-				}
-				v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
-				res += v
-				resArray = append(resArray, v)
-			}
+			return parseFields(t)
 		case string:
 			reg := regexp.MustCompile(`\s*,\s*`)
 			matches := reg.Split(t, -1)
 			if matches != nil {
-				for i, v := range matches {
-					if i != 0 {
-						res += ", "
-					}
-
-					v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
-					res += v
-					resArray = append(resArray, v)
-				}
+				return _parseFields(matches)
 			}
-
 		}
 	}
+
 	if fields == nil || len(res) == 0 {
 		res = "*"
 		resArray = append(resArray, "*")
 	}
+	return
+}
+
+func parseDistinct(distinct interface{}) (res string) {
+	if distinct != nil {
+		switch t := distinct.(type) {
+		case []string:
+			res, _ = parseFields(t)
+		case string:
+			reg := regexp.MustCompile(`\s*,\s*`)
+			matches := reg.Split(t, -1)
+			if matches != nil {
+				res, _ = _parseFields(matches)
+			}
+		}
+	}
+
 	return
 }
 
