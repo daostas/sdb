@@ -168,12 +168,12 @@ func parseFields(fields interface{}) (res string, resArray []string) {
 	if fields != nil {
 		switch t := fields.(type) {
 		case []string:
-			return _parseFields(t)
+			res, resArray = _parseFields(t)
 		case string:
 			reg := regexp.MustCompile(`\s*,\s*`)
 			matches := reg.Split(t, -1)
 			if matches != nil {
-				return _parseFields(matches)
+				res, resArray = _parseFields(matches)
 			}
 		}
 	}
