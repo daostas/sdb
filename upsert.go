@@ -10,6 +10,7 @@ func Upsert[Model ModelTable](db Sdb, model Model) (q UpsertQuery[[]*Model]) {
 }
 
 func (q UpsertQuery[Out]) Values(values Map, params ...ValuesParam) UpsertQuery[Out] {
+	params = append(params, OptimizeUpdate)
 	q.query.setValues(values, params...)
 	return q
 }
