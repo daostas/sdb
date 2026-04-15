@@ -395,6 +395,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 
 					if counter == 0 {
 						s += "DO NOTHING "
+						q.doNothing = true
 						continue
 					} else {
 						s += "DO UPDATE "
@@ -448,6 +449,10 @@ func (q query[Out]) getQuery() (s string, err error) {
 
 	//Where
 	if queryTypeConst["where"][q.queryType] {
+		if !q.doNothing {
+			return s, nil
+		}
+
 		where, err := parseWhere(q.db, q.table, fieldsArray, q.where)
 		if err != nil {
 			return s, err
