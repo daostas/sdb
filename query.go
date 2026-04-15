@@ -449,7 +449,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 
 	//Where
 	if queryTypeConst["where"][q.queryType] {
-		if !q.doNothing {
+		if q.doNothing {
 			return s, nil
 		}
 
