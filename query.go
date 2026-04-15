@@ -380,9 +380,24 @@ func (q query[Out]) getQuery() (s string, err error) {
 			if queryTypeConst["set"][q.queryType] || (queryTypeConst["set1"][q.queryType] && round == 1) {
 
 				if round == 1 {
-					s += "DO UPDATE "
 					if q.updateValues != nil {
 						q.values = q.updateValues
+					}
+
+					var counter = len(q.values)
+					for k, _ := range q.values {
+						for _, field := range conflictArray {
+							if field == fmt.Sprintf(`"%s"`, k) {
+								counter--
+							}
+						}
+					}
+
+					if counter == 0 {
+						s += "DO NOTHING "
+						continue
+					} else {
+						s += "DO UPDATE "
 					}
 				}
 
