@@ -157,7 +157,16 @@ func _parseFields(fields []string) (res string, resArray []string) {
 			res += ", "
 		}
 
-		v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+		r := regexp.MustCompile(`(?i)^(SUM|AVG|MIN|MAX|COUNT)\((.+)\)$`)
+
+		if r.MatchString(v) {
+			match := r.FindStringSubmatch(v)
+			match[2] = fmt.Sprintf(`"%s"`, strings.ReplaceAll(match[2], `"`, `""`))
+			v = fmt.Sprintf("%s(%s)", strings.ToUpper(match[1]), match[2])
+		} else {
+			v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+		}
+
 		res += v
 		resArray = append(resArray, v)
 	}
