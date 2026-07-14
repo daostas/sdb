@@ -414,14 +414,14 @@ func (q query[Out]) getQuery() (s string, err error) {
 						}
 
 						if q.exclude {
-							v = fmt.Sprintf("EXCLUDED.%s", k)
+							v = fmt.Sprintf(`EXCLUDED."%s"`, k)
 						}
 
 					}
 					if i != 0 {
 						s += ", "
 					}
-					s += fmt.Sprintf("%s = %s", k, v)
+					s += fmt.Sprintf(`"%s" = %s`, k, v)
 					i++
 				}
 				s += " "
@@ -435,7 +435,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 						template += ", "
 						values += ", "
 					}
-					template += k
+					template += fmt.Sprintf(`"%s"`, k)
 					values += v
 					i++
 				}
@@ -469,7 +469,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 			i := 0
 			for k, v := range q.values {
 				if q.exclude {
-					v = fmt.Sprintf("EXCLUDED.%s", k)
+					v = fmt.Sprintf(`EXCLUDED."%s"`, k)
 				}
 
 				if i != 0 {
@@ -478,7 +478,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 				}
 
 				if queryTypeConst["set1"][q.queryType] {
-					keys += fmt.Sprintf("%s.%s", q.table, k)
+					keys += fmt.Sprintf(`"%s"."%s"`, q.table, k)
 				} else {
 					keys += k
 				}
