@@ -478,7 +478,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 				}
 
 				if queryTypeConst["set1"][q.queryType] {
-					keys += fmt.Sprintf(`"%s"."%s"`, q.table, k)
+					keys += fmt.Sprintf(`%s."%s"`, q.table, k)
 				} else {
 					keys += k
 				}
