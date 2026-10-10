@@ -10,42 +10,66 @@ import (
 	qp "github.com/daostas/query_parser"
 )
 
-func parseQueryParam(sdb Sdb, table string, fields []string, param qp.QueryParam) (result string, err error) {
-	if param.Key == "*" {
-		if fields[0] == "*" {
+func parseQueryParam(sdb Sdb, table string, fields []string, param qp.QueryParam, columns ...string) (result string, err error) {
 
-			columns, err := ColumnsByTable(sdb, table)
-			if err != nil {
-				return "", err
-			}
-
-			param.Type = "::text"
-
-			for i, column := range columns {
-				if i == 0 {
-					result += "("
-				} else if i < len(columns) {
-					result += " or "
-				}
-				result += fmt.Sprintf(`"%s"%s %s %s`, column, param.Type, param.Sign, param.Value)
-			}
-			result += ")"
-
-		} else {
-			for i, v := range fields {
-				if i == 0 {
-					result += "("
-				} else {
-					result += " or "
-				}
-				result += fmt.Sprintf(`%s%s %s %s`, v, param.Type, param.Sign, param.Value)
-			}
-			result += ")"
-		}
-	} else {
-		result += param.String()
+	var makeSqlString = func(key, _type, sign, value string) string {
+		return fmt.Sprintf(`%s%s %s %s`, key, _type, sign, value)
 	}
 
+	//проходимся по ключам
+	for i, key := range param.KeyArray {
+
+		if i == 0 {
+			result += "("
+		} else {
+			result += " or "
+		}
+
+		//если поиск идет по всем полям
+		if key == "*" {
+			//если не были указаны определенные fields, достаем список колонок из таблицы
+			if fields[0] == "*" {
+
+				if len(columns) == 0 {
+					columns, err = ColumnsByTable(sdb, table)
+					if err != nil {
+						return
+					}
+				}
+
+				param.Type = "::text"
+
+				for i, column := range columns {
+					if i != 0 {
+						result += " or "
+					}
+					result += makeSqlString(column, param.Type, param.Sign, param.Value)
+				}
+
+			} else {
+				//Если переданы fields, работаем с ними
+				for i, v := range fields {
+					if i != 0 {
+						result += " or "
+					}
+					result += makeSqlString(v, param.Type, param.Sign, param.Value)
+				}
+			}
+		} else {
+			result += makeSqlString(key, param.Type, param.Sign, param.Value)
+		}
+	}
+	result += ")"
+
+	for _, param := range param.OR {
+		result += " or "
+		res, err := parseQueryParam(sdb, table, fields, *param, columns...)
+		if err != nil {
+			return "", err
+		}
+
+		result += res
+	}
 	return
 }
 

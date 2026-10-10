@@ -1,5 +1,8 @@
 github.com/daostas/query_parser v1.0.1 h1:Rw7lSmnL9we0FSwJRxxKsIs/y4r9iimtR6Y5L9Z1zc0=
 github.com/daostas/query_parser v1.0.1/go.mod h1:YEuaRd/lSldSw5d/uYsppI10KhAGzEnn/8wlqwfht5I=
+github.com/daostas/query_parser v1.0.2 h1:cxYqfSf1rTqZ4F6uDqfaUKEU6GcVZw7SQNqy2no4fCk=
+github.com/daostas/query_parser v1.0.2/go.mod h1:YEuaRd/lSldSw5d/uYsppI10KhAGzEnn/8wlqwfht5I=
+github.com/daostas/query_parser v1.0.3/go.mod h1:YEuaRd/lSldSw5d/uYsppI10KhAGzEnn/8wlqwfht5I=
 github.com/daostas/slogger v1.1.0 h1:W02iotpfnmDtX6+e1X2UXpsum6N7zB8wozf09aqdsCw=
 github.com/daostas/slogger v1.1.0/go.mod h1:6qZe5hAASg8iB/n31CCJ+oyaJ54V0BW86SmDeXnLvMg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
