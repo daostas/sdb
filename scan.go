@@ -136,9 +136,12 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 					dests[i] = new(any) // Ignore unexported fields.
 					continue
 				}
-				// **T lets pgx distinguish SQL NULL from a concrete T. This
-				// scanner deliberately maps NULL to T's zero value.
-				d := reflect.New(reflect.PointerTo(field.Type()))
+				// Scan into **T so pgx can distinguish SQL NULL from a concrete
+				// value. Always scan into the non-pointer base type: wrapping a
+				// pointer field directly would produce ***T (or deeper), which
+				// pgx codecs do not support for values such as time.Time.
+				baseType := dereferenceType(field.Type())
+				d := reflect.New(reflect.PointerTo(baseType))
 				dests[i] = d.Interface()
 				setters[i] = d
 			} else {
@@ -158,7 +161,11 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 			if holder.IsNil() {
 				field.Set(reflect.Zero(field.Type()))
 			} else {
-				field.Set(holder.Elem())
+				value, err := valueForType(field.Type(), holder.Elem())
+				if err != nil {
+					return fmt.Errorf("sdb: assign column %q to field %s: %w", columns[i].Name, field.Type(), err)
+				}
+				field.Set(value)
 			}
 		}
 		return nil
@@ -197,7 +204,8 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 		if !target.CanSet() {
 			return fmt.Errorf("sdb: Scan: destination %s is not settable", target.Type())
 		}
-		d := reflect.New(reflect.PointerTo(target.Type()))
+		baseType := dereferenceType(target.Type())
+		d := reflect.New(reflect.PointerTo(baseType))
 		if err := rows.Scan(d.Interface()); err != nil {
 			return fmt.Errorf("sdb: scan scalar row: %w", err)
 		}
@@ -205,10 +213,43 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 		if holder.IsNil() {
 			target.Set(reflect.Zero(target.Type()))
 		} else {
-			target.Set(holder.Elem())
+			value, err := valueForType(target.Type(), holder.Elem())
+			if err != nil {
+				return fmt.Errorf("sdb: assign scalar to %s: %w", target.Type(), err)
+			}
+			target.Set(value)
 		}
 		return nil
 	}
+}
+
+// dereferenceType returns the non-pointer base type of t.
+func dereferenceType(t reflect.Type) reflect.Type {
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t
+}
+
+// valueForType reconstructs the requested pointer depth around a decoded base
+// value. A nil SQL value is handled by the caller and becomes the target's zero value.
+func valueForType(targetType reflect.Type, value reflect.Value) (reflect.Value, error) {
+	if targetType.Kind() == reflect.Ptr {
+		p := reflect.New(targetType.Elem())
+		inner, err := valueForType(targetType.Elem(), value)
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		p.Elem().Set(inner)
+		return p, nil
+	}
+	if value.Type().AssignableTo(targetType) {
+		return value, nil
+	}
+	if value.Type().ConvertibleTo(targetType) {
+		return value.Convert(targetType), nil
+	}
+	return reflect.Value{}, fmt.Errorf("cannot assign %s to %s", value.Type(), targetType)
 }
 
 func structColumnMap(t reflect.Type) map[string]int {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -232,5 +233,49 @@ func TestScanPointerToStruct(t *testing.T) {
 	}
 	if got == nil || got.ID != 7 {
 		t.Fatalf("unexpected pointer result: %#v", got)
+	}
+}
+
+func TestScanTimeFieldsWithDifferentPointerDepths(t *testing.T) {
+	type record struct {
+		Created time.Time   `json:"created"`
+		Updated *time.Time  `json:"updated"`
+		Deleted **time.Time `json:"deleted"`
+	}
+	wantTime := time.Date(2026, time.October, 10, 12, 30, 0, 0, time.UTC)
+	rows := newFakeRows(
+		[]string{"created", "updated", "deleted"},
+		[]any{wantTime, wantTime, wantTime},
+	)
+	var got record
+	if err := Scan(rows, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Created.Equal(wantTime) {
+		t.Fatalf("Created = %v, want %v", got.Created, wantTime)
+	}
+	if got.Updated == nil || !got.Updated.Equal(wantTime) {
+		t.Fatalf("Updated = %v, want %v", got.Updated, wantTime)
+	}
+	if got.Deleted == nil || *got.Deleted == nil || !(**got.Deleted).Equal(wantTime) {
+		t.Fatalf("Deleted = %v, want pointer depth 2 to %v", got.Deleted, wantTime)
+	}
+}
+
+func TestScanNullTimeFieldsBecomeZeroValues(t *testing.T) {
+	type record struct {
+		Created time.Time  `json:"created"`
+		Updated *time.Time `json:"updated"`
+	}
+	rows := newFakeRows([]string{"created", "updated"}, []any{nil, nil})
+	var got record
+	if err := Scan(rows, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Created.IsZero() {
+		t.Fatalf("Created = %v, want zero time", got.Created)
+	}
+	if got.Updated != nil {
+		t.Fatalf("Updated = %v, want nil", got.Updated)
 	}
 }
