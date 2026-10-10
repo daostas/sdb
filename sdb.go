@@ -1,17 +1,20 @@
 package sdb
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/daostas/slogger"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	InformationSchemaColumns = "information_schema.columns"
-)
+const InformationSchemaColumns = "information_schema.columns"
 
 type DigitConstraints interface {
 	int | int8 | int16 | int32 | int64
@@ -21,14 +24,24 @@ type ModelTable interface {
 	Table() string
 }
 
+// dbConn is implemented by both pgxpool.Pool and pgx.Tx.
+type dbConn interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
 type Sdb struct {
-	db        *gorm.DB
+	db        dbConn
+	pool      *pgxpool.Pool
+	tx        pgx.Tx
+	txErr     error
 	logger    slogger.Logger
 	log       bool
 	logInFile bool
 }
 
-type DbConfig struct {
+type Config struct {
 	Server                 string `yaml:"server" json:"server"`
 	Port                   int    `yaml:"port" json:"port"`
 	Username               string `yaml:"username" json:"username"`
@@ -44,54 +57,74 @@ type DbConfig struct {
 	LogInFile              bool   `yaml:"log_in_file" json:"log_in_file"`
 }
 
-func ConnectDb(config DbConfig, logger slogger.Logger, prefix string) (db Sdb, err error) {
-
-	dataSource := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%d",
-		config.Server,
-		config.Username,
-		config.Password,
-		config.Name,
-		config.Port,
-	)
-
+func Connect(config Config, logger slogger.Logger, loggerPrefix string) (Sdb, error) {
+	dsnURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(config.Username, config.Password),
+		Host:   net.JoinHostPort(config.Server, strconv.Itoa(config.Port)),
+		Path:   "/" + config.Name,
+	}
 	if !config.Ssl {
-		dataSource += " sslmode=disable"
+		query := dsnURL.Query()
+		query.Set("sslmode", "disable")
+		dsnURL.RawQuery = query.Encode()
 	}
 
-	db.log = config.Log
-	db.logInFile = config.LogInFile
-	db.db, err = gorm.Open(postgres.New(postgres.Config{
-		DSN:                  dataSource,
-		PreferSimpleProtocol: true,
-	}), &gorm.Config{
-		SkipDefaultTransaction: config.SkipDefaultTransaction,
-	})
+	poolConfig, err := pgxpool.ParseConfig(dsnURL.String())
 	if err != nil {
-		return
+		return Sdb{}, fmt.Errorf("sdb: parse PostgreSQL config: %w", err)
 	}
-
-	sqlDb, err := db.db.DB()
+	if config.MaxOpenConnections > 0 {
+		poolConfig.MaxConns = int32(config.MaxOpenConnections)
+	} else {
+		// database/sql interpreted zero as unlimited. pgxpool requires a
+		// positive limit, so use the largest supported int32 value.
+		poolConfig.MaxConns = int32(^uint32(0) >> 1)
+	}
+	const effectivelyUnlimited = time.Duration(1<<63 - 1)
+	poolConfig.MaxConnLifetime = effectivelyUnlimited
+	if config.MaxLifeTime > 0 {
+		poolConfig.MaxConnLifetime = time.Duration(config.MaxLifeTime) * time.Millisecond
+	}
+	poolConfig.MaxConnIdleTime = effectivelyUnlimited
+	if config.MaxIdleLifeTime > 0 {
+		poolConfig.MaxConnIdleTime = time.Duration(config.MaxIdleLifeTime) * time.Millisecond
+	}
+	// pgxpool has MinConns but no direct equivalent of database/sql's
+	// MaxIdleConns. Keep the pool's default minimum rather than reserving
+	// connections just to emulate MaxIdleConnections.
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		return
+		return Sdb{}, fmt.Errorf("sdb: connect to PostgreSQL: %w", err)
 	}
 
-	sqlDb.SetMaxIdleConns(config.MaxIdleConnections)
-	sqlDb.SetMaxOpenConns(config.MaxOpenConnections)
-	sqlDb.SetConnMaxLifetime(time.Duration(config.MaxLifeTime) * time.Millisecond)
-	sqlDb.SetConnMaxIdleTime(time.Duration(config.MaxIdleLifeTime) * time.Millisecond)
+	if err := pool.Ping(context.Background()); err != nil {
+		pool.Close()
+		return Sdb{}, fmt.Errorf("sdb: ping PostgreSQL: %w", err)
+	}
 
-	logger.AddToPrefix(prefix)
-	db.logger = logger
-	return
+	logger.AddToPrefix(loggerPrefix)
+	return Sdb{
+		db:        pool,
+		pool:      pool,
+		logger:    logger,
+		log:       config.Log,
+		logInFile: config.LogInFile,
+	}, nil
 }
 
 func (sdb *Sdb) Close() error {
-	if db, err := sdb.db.DB(); err == nil {
-		return db.Close()
-	} else {
-		return err
+	if sdb == nil {
+		return nil
 	}
+	if sdb.tx != nil {
+		return fmt.Errorf("sdb: cannot close pool from a transaction handle; commit or rollback the transaction")
+	}
+	if sdb.pool != nil {
+		sdb.pool.Close()
+		return nil
+	}
+	return sdb.txErr
 }
 
 func (s *Sdb) Set(log bool, logger ...slogger.Logger) *Sdb {
@@ -111,50 +144,75 @@ func (s Sdb) Copy(log bool, logger ...slogger.Logger) (copy Sdb) {
 	return
 }
 
+// Begin starts a transaction. Errors are retained on the returned Sdb and
+// can be checked with Err(); use BeginContext when explicit error handling is preferred.
 func (sdb Sdb) Begin() Sdb {
-	return Sdb{
-		db:     sdb.db.Begin(),
-		logger: sdb.logger,
-		log:    sdb.log,
+	txDB, err := sdb.BeginContext(context.Background())
+	if err != nil {
+		txDB.txErr = err
 	}
+	return txDB
+}
+
+// BeginContext starts a transaction and returns any startup error immediately.
+func (sdb Sdb) BeginContext(ctx context.Context) (Sdb, error) {
+	if sdb.txErr != nil {
+		return sdb, sdb.txErr
+	}
+	if sdb.tx != nil {
+		return sdb, fmt.Errorf("sdb: nested transactions are not supported")
+	}
+	if sdb.db == nil {
+		return sdb, fmt.Errorf("sdb: database is not connected")
+	}
+	tx, err := sdb.db.(interface {
+		Begin(context.Context) (pgx.Tx, error)
+	}).Begin(ctx)
+	if err != nil {
+		return sdb, fmt.Errorf("sdb: begin transaction: %w", err)
+	}
+	sdb.db = tx
+	sdb.tx = tx
+	return sdb, nil
 }
 
 func (sdb Sdb) Rollback() Sdb {
-	return Sdb{
-		db:     sdb.db.Rollback(),
-		logger: sdb.logger,
-		log:    sdb.log,
+	if sdb.tx == nil {
+		sdb.txErr = fmt.Errorf("sdb: rollback called outside a transaction")
+		return sdb
 	}
+	if err := sdb.tx.Rollback(context.Background()); err != nil {
+		sdb.txErr = fmt.Errorf("sdb: rollback transaction: %w", err)
+	}
+	sdb.tx = nil
+	if sdb.pool != nil {
+		sdb.db = sdb.pool
+	}
+	return sdb
 }
 
 func (sdb Sdb) Commit() Sdb {
-	return Sdb{
-		db:     sdb.db.Commit(),
-		logger: sdb.logger,
-		log:    sdb.log,
+	if sdb.tx == nil {
+		sdb.txErr = fmt.Errorf("sdb: commit called outside a transaction")
+		return sdb
 	}
+	if err := sdb.tx.Commit(context.Background()); err != nil {
+		sdb.txErr = fmt.Errorf("sdb: commit transaction: %w", err)
+	}
+	sdb.tx = nil
+	if sdb.pool != nil {
+		sdb.db = sdb.pool
+	}
+	return sdb
 }
 
-func (sdb Sdb) Scan(db *gorm.DB, out interface{}) error {
-	rows, err := db.Rows()
-	if err != nil {
-		return err
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		err = db.ScanRows(rows, &out)
-		if err != nil {
-			return err
-		}
-	}
-	return rows.Err()
+// Err returns a transaction lifecycle error retained by Begin, Commit or Rollback.
+func (sdb Sdb) Err() error {
+	return sdb.txErr
 }
 
 func CallRoutine(sdb Sdb, funcName string, args ...any) (m map[string]interface{}, err error) {
 	query := fmt.Sprintf("SELECT * FROM %s(", funcName)
-	//Формируем аргументы из args
 	for i, arg := range args {
 		query += ValueToPostgresValue(arg)
 		if i < len(args)-1 {
@@ -163,11 +221,23 @@ func CallRoutine(sdb Sdb, funcName string, args ...any) (m map[string]interface{
 	}
 	query += ")"
 
-	// Логирование и выполнение функции
 	if sdb.log {
-		sdb.logger.Info(query)
+		if sdb.logInFile {
+			sdb.logger.InfoFl(query)
+		} else {
+			sdb.logger.Info(query)
+		}
 	}
-
-	err = sdb.db.Raw(query).Scan(&m).Error
+	if sdb.txErr != nil {
+		return nil, sdb.txErr
+	}
+	if sdb.db == nil {
+		return nil, fmt.Errorf("sdb: database is not connected")
+	}
+	rows, err := sdb.db.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	err = Scan(rows, &m)
 	return
 }

@@ -1,9 +1,12 @@
 package sdb
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type (
@@ -272,6 +275,12 @@ func (q *query[Out]) exec() (out Out, err error) {
 	if err != nil {
 		return
 	}
+	if q.db.txErr != nil {
+		return out, q.db.txErr
+	}
+	if q.db.db == nil {
+		return out, fmt.Errorf("sdb: database is not connected")
+	}
 
 	if q.db.log {
 		if q.db.logInFile {
@@ -281,49 +290,27 @@ func (q *query[Out]) exec() (out Out, err error) {
 		}
 	}
 
+	ctx := context.Background()
 	switch q.queryType {
-	case create, update, deleteType:
-		err = q.db.db.Exec(query).Error
-	case selectOne:
-		t := reflect.TypeOf(out)
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-
-		if t.Kind() == reflect.Map {
-			var tempOut []Out
-			err = q.db.db.Raw(query).Scan(&tempOut).Error
-			if err != nil {
-				return
-			}
-			if len(tempOut) == 0 {
-				err = ErrRecordNotFound
-			} else {
-				out = tempOut[0]
-			}
-		} else {
-			var tempOut []*Out
-			err = q.db.db.Raw(query).Scan(&tempOut).Error
-			if err != nil {
-				return
-			}
-			if len(tempOut) == 0 {
-				err = ErrRecordNotFound
-			} else {
-				out = *tempOut[0]
-			}
-		}
+	case create, update, deleteType, upsert:
+		_, err = q.db.db.Exec(ctx, query)
 	default:
-		err = q.db.db.Raw(query).Scan(&out).Error
+		var rows pgx.Rows
+		rows, err = q.db.db.Query(ctx, query)
+		if err == nil {
+			if q.queryType == selectOne {
+				err = scanFirst(rows, &out)
+			} else {
+				err = Scan(rows, &out)
+			}
+		}
 	}
 
-	if err != nil {
-		if q.db.log {
-			if q.db.logInFile {
-				q.db.logger.ErrorFl(err)
-			} else {
-				q.db.logger.Err(err)
-			}
+	if err != nil && q.db.log {
+		if q.db.logInFile {
+			q.db.logger.ErrorFl(err)
+		} else {
+			q.db.logger.Err(err)
 		}
 	}
 	return
