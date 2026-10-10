@@ -11,6 +11,7 @@ import (
 
 type fakeRows struct {
 	columns []string
+	oids    []uint32
 	data    [][]any
 	index   int
 	closed  bool
@@ -20,10 +21,17 @@ type fakeRows struct {
 func newFakeRows(columns []string, data ...[]any) *fakeRows {
 	return &fakeRows{columns: columns, data: data, index: -1}
 }
+
+func newFakeRowsWithOIDs(columns []string, oids []uint32, data ...[]any) *fakeRows {
+	return &fakeRows{columns: columns, oids: oids, data: data, index: -1}
+}
 func (r *fakeRows) FieldDescriptions() []pgconn.FieldDescription {
 	out := make([]pgconn.FieldDescription, len(r.columns))
 	for i, name := range r.columns {
 		out[i].Name = name
+		if i < len(r.oids) {
+			out[i].DataTypeOID = r.oids[i]
+		}
 	}
 	return out
 }
@@ -277,5 +285,43 @@ func TestScanNullTimeFieldsBecomeZeroValues(t *testing.T) {
 	}
 	if got.Updated != nil {
 		t.Fatalf("Updated = %v, want nil", got.Updated)
+	}
+}
+
+func TestScanTimestampIntoStringField(t *testing.T) {
+	type record struct {
+		Created string `json:"created"`
+	}
+	stamp := time.Date(2026, time.October, 10, 15, 47, 0, 0, time.UTC)
+	rows := newFakeRowsWithOIDs(
+		[]string{"created"},
+		[]uint32{1114}, // PostgreSQL timestamp without time zone
+		[]any{stamp},
+	)
+	var got record
+	if err := Scan(rows, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Created != "2026-10-10 15:47:00" {
+		t.Fatalf("Created = %q, want %q", got.Created, "2026-10-10 15:47:00")
+	}
+}
+
+func TestScanTimestamptzIntoStringField(t *testing.T) {
+	type record struct {
+		Created string `json:"created"`
+	}
+	stamp := time.Date(2026, time.October, 10, 15, 47, 0, 0, time.FixedZone("UTC+5", 5*60*60))
+	rows := newFakeRowsWithOIDs(
+		[]string{"created"},
+		[]uint32{1184}, // PostgreSQL timestamp with time zone
+		[]any{stamp},
+	)
+	var got record
+	if err := Scan(rows, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Created != "2026-10-10 15:47:00+05:00" {
+		t.Fatalf("Created = %q, want %q", got.Created, "2026-10-10 15:47:00+05:00")
 	}
 }

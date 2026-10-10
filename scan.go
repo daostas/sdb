@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // scanRows is the subset of pgx.Rows used by Scan. pgx.Rows implements it.
@@ -141,7 +143,8 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 				// pointer field directly would produce ***T (or deeper), which
 				// pgx codecs do not support for values such as time.Time.
 				baseType := dereferenceType(field.Type())
-				d := reflect.New(reflect.PointerTo(baseType))
+				scanType := scanTypeForColumn(col.DataTypeOID, baseType)
+				d := reflect.New(reflect.PointerTo(scanType))
 				dests[i] = d.Interface()
 				setters[i] = d
 			} else {
@@ -161,7 +164,7 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 			if holder.IsNil() {
 				field.Set(reflect.Zero(field.Type()))
 			} else {
-				value, err := valueForType(field.Type(), holder.Elem())
+				value, err := valueForColumnType(field.Type(), holder.Elem(), columns[i].DataTypeOID)
 				if err != nil {
 					return fmt.Errorf("sdb: assign column %q to field %s: %w", columns[i].Name, field.Type(), err)
 				}
@@ -205,7 +208,8 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 			return fmt.Errorf("sdb: Scan: destination %s is not settable", target.Type())
 		}
 		baseType := dereferenceType(target.Type())
-		d := reflect.New(reflect.PointerTo(baseType))
+		scanType := scanTypeForColumn(columns[0].DataTypeOID, baseType)
+		d := reflect.New(reflect.PointerTo(scanType))
 		if err := rows.Scan(d.Interface()); err != nil {
 			return fmt.Errorf("sdb: scan scalar row: %w", err)
 		}
@@ -213,7 +217,7 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 		if holder.IsNil() {
 			target.Set(reflect.Zero(target.Type()))
 		} else {
-			value, err := valueForType(target.Type(), holder.Elem())
+			value, err := valueForColumnType(target.Type(), holder.Elem(), columns[0].DataTypeOID)
 			if err != nil {
 				return fmt.Errorf("sdb: assign scalar to %s: %w", target.Type(), err)
 			}
@@ -221,6 +225,43 @@ func scanCurrentRow(rows scanRows, target reflect.Value) error {
 		}
 		return nil
 	}
+}
+
+// scanTypeForColumn chooses a pgx-compatible intermediate type for destination fields.
+// pgx decodes PostgreSQL timestamps as time.Time, not string, when rows use binary format.
+func scanTypeForColumn(oid uint32, targetType reflect.Type) reflect.Type {
+	if targetType.Kind() == reflect.String && isDateTimeOID(oid) {
+		return reflect.TypeOf(time.Time{})
+	}
+	return targetType
+}
+
+func isDateTimeOID(oid uint32) bool {
+	switch oid {
+	case pgtype.DateOID, pgtype.TimestampOID, pgtype.TimestamptzOID:
+		return true
+	default:
+		return false
+	}
+}
+
+func formatDateTimeString(t time.Time, oid uint32) string {
+	switch oid {
+	case pgtype.DateOID:
+		return t.Format("2006-01-02")
+	case pgtype.TimestamptzOID:
+		return t.Format("2006-01-02 15:04:05.999999999-07:00")
+	default: // timestamp without time zone
+		return t.Format("2006-01-02 15:04:05.999999999")
+	}
+}
+
+func valueForColumnType(targetType reflect.Type, value reflect.Value, oid uint32) (reflect.Value, error) {
+	if dereferenceType(targetType).Kind() == reflect.String && value.IsValid() && value.Type() == reflect.TypeOf(time.Time{}) && isDateTimeOID(oid) {
+		formatted := reflect.ValueOf(formatDateTimeString(value.Interface().(time.Time), oid))
+		return valueForType(targetType, formatted)
+	}
+	return valueForType(targetType, value)
 }
 
 // dereferenceType returns the non-pointer base type of t.
