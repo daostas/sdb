@@ -266,7 +266,7 @@ func NewWhere(where string, args ...interface{}) string {
 	return where
 }
 
-func parseWhere(sdb Sdb, table string, fields []string, where interface{}) (_where string, err error) {
+func parseWhere(sdb Sdb, table string, fields []string, where interface{}, args []interface{}) (_where string, err error) {
 	switch t := where.(type) {
 	case string:
 		if len(t) >= 2 {
@@ -279,7 +279,11 @@ func parseWhere(sdb Sdb, table string, fields []string, where interface{}) (_whe
 
 				_where, err = MakeSqlWhereFromApiWhere(sdb, table, fields, arr)
 			} else {
-				_where = t
+				if len(args) != 0 {
+					_where = NewWhere(t, args...)
+				} else {
+					_where = t
+				}
 			}
 		}
 	case qp.QueryParams, qp.QueryParam, *qp.QueryParams, *qp.QueryParam:

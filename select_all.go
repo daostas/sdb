@@ -24,7 +24,7 @@ func (q SelectAllQuery[Out]) Orders(orders interface{}) SelectAllQuery[Out] {
 	return q
 }
 
-func (q SelectAllQuery[Out]) Where(where interface{}) SelectAllQuery[Out] {
+func (q SelectAllQuery[Out]) Where(where interface{}, args ...interface{}) SelectAllQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }

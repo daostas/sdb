@@ -29,7 +29,7 @@ func (q UpsertSelectOneMapQuery[Out]) UpdateValues(values Map, params ...ValuesP
 	return q
 }
 
-func (q UpsertSelectOneMapQuery[Out]) Where(where interface{}) UpsertSelectOneMapQuery[Out] {
+func (q UpsertSelectOneMapQuery[Out]) Where(where interface{}, args ...interface{}) UpsertSelectOneMapQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }

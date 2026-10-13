@@ -17,6 +17,7 @@ type (
 		fields           interface{}
 		orders           interface{}
 		where            interface{}
+		whereArgs        []interface{}
 		limit            interface{}
 		offset           interface{}
 		values           map[string]string
@@ -167,8 +168,9 @@ func (q *query[Out]) setOrders(orders interface{}) *query[Out] {
 	return q
 }
 
-func (q *query[Out]) setWhere(where interface{}) *query[Out] {
+func (q *query[Out]) setWhere(where interface{}, args ...interface{}) *query[Out] {
 	q.where = where
+	q.whereArgs = args
 	return q
 }
 
@@ -440,7 +442,7 @@ func (q query[Out]) getQuery() (s string, err error) {
 			return s, nil
 		}
 
-		where, err := parseWhere(q.db, q.table, fieldsArray, q.where)
+		where, err := parseWhere(q.db, q.table, fieldsArray, q.where, q.whereArgs)
 		if err != nil {
 			return s, err
 		}

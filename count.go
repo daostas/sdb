@@ -14,8 +14,8 @@ func (q CountQuery[Out]) Fields(fields interface{}) CountQuery[Out] {
 	return q
 }
 
-func (q CountQuery[Out]) Where(where interface{}) CountQuery[Out] {
-	q.query.setWhere(where)
+func (q CountQuery[Out]) Where(where interface{}, args ...interface{}) CountQuery[Out] {
+	q.query.setWhere(where, args...)
 	return q
 }
 

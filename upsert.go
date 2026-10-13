@@ -26,7 +26,7 @@ func (q UpsertQuery[Out]) UpdateValues(values Map, params ...ValuesParam) Upsert
 	return q
 }
 
-func (q UpsertQuery[Out]) Where(where interface{}) UpsertQuery[Out] {
+func (q UpsertQuery[Out]) Where(where interface{}, args ...interface{}) UpsertQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }

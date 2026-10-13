@@ -19,7 +19,7 @@ func (q UpdateSelectOneQuery[Out]) Values(values Map, params ...ValuesParam) Upd
 	return q
 }
 
-func (q UpdateSelectOneQuery[Out]) Where(where interface{}) UpdateSelectOneQuery[Out] {
+func (q UpdateSelectOneQuery[Out]) Where(where interface{}, args ...interface{}) UpdateSelectOneQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }

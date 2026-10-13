@@ -9,7 +9,7 @@ func Delete[Model ModelTable](db Sdb, model Model) (q DeleteQuery[Model]) {
 	return
 }
 
-func (q DeleteQuery[Out]) Where(where interface{}) DeleteQuery[Out] {
+func (q DeleteQuery[Out]) Where(where interface{}, args ...interface{}) DeleteQuery[Out] {
 	q.query.setWhere(where)
 	return q
 }
