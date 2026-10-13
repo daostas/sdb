@@ -29,6 +29,16 @@ func (q SelectAllMapQuery[Out]) Where(where interface{}, args ...interface{}) Se
 	return q
 }
 
+func (q SelectAllMapQuery[Out]) GroupBy(groupBy interface{}) SelectAllMapQuery[Out] {
+	q.query.setGroupBy(groupBy)
+	return q
+}
+
+func (q SelectAllMapQuery[Out]) Having(having interface{}) SelectAllMapQuery[Out] {
+	q.query.setHaving(having)
+	return q
+}
+
 func (q SelectAllMapQuery[Out]) Limit(limit interface{}) SelectAllMapQuery[Out] {
 	q.query.setLimit(limit)
 	return q

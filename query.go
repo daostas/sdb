@@ -20,6 +20,8 @@ type (
 		whereArgs        []interface{}
 		limit            interface{}
 		offset           interface{}
+		groupBy          interface{}
+		having           interface{}
 		values           map[string]string
 		updateValues     map[string]string
 		conflict         interface{}
@@ -80,6 +82,9 @@ var (
 			upsert:          true,
 			upsertSelectAll: true,
 			upsertSelectOne: true,
+		},
+		"groupBy": {
+			selectAll: true,
 		},
 		"limit": {
 			selectAll: true,
@@ -190,6 +195,16 @@ func (q *query[Out]) setOffset(offset interface{}) *query[Out] {
 			q.offset = int(v)
 		}
 	}
+	return q
+}
+
+func (q *query[Out]) setGroupBy(groupBy interface{}) *query[Out] {
+	q.groupBy = groupBy
+	return q
+}
+
+func (q *query[Out]) setHaving(having interface{}) *query[Out] {
+	q.having = having
 	return q
 }
 
@@ -485,6 +500,21 @@ func (q query[Out]) getQuery() (s string, err error) {
 			}
 
 			s += fmt.Sprintf("(%s IS DISTINCT FROM %s) ", keys, values)
+		}
+
+	}
+
+	//GroupBy
+	if queryTypeConst["groupBy"][q.queryType] {
+		if q.groupBy != nil {
+			groupBy := parseGroupBy(q.groupBy)
+			if groupBy != "" {
+				s += "GROUP BY " + groupBy + " "
+				having := parseHaving(q.having)
+				if having != "" {
+					s += "HAVING " + having + " "
+				}
+			}
 		}
 
 	}

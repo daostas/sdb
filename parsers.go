@@ -176,25 +176,46 @@ func ValueToPostgresValue(arg interface{}, isArray ...bool) (str string) {
 }
 
 func _parseFields(fields []string) (res string, resArray []string) {
+	aliasRegexp := regexp.MustCompile(`(?i)^(.+?)\s+AS\s+(.+)$`)
+	aggregateRegexp := regexp.MustCompile(`(?i)^(SUM|AVG|MIN|MAX|COUNT)\((.+)\)$`)
+
 	for i, v := range fields {
 		if i != 0 {
 			res += ", "
 		}
 
-		r := regexp.MustCompile(`(?i)^(SUM|AVG|MIN|MAX|COUNT)\((.+)\)$`)
+		v = strings.TrimSpace(v)
+		alias := ""
+		if match := aliasRegexp.FindStringSubmatch(v); match != nil {
+			v = strings.TrimSpace(match[1])
+			alias = quoteFieldIdentifier(match[2])
+		}
 
-		if r.MatchString(v) {
-			match := r.FindStringSubmatch(v)
-			match[2] = fmt.Sprintf(`"%s"`, strings.ReplaceAll(match[2], `"`, `""`))
-			v = fmt.Sprintf("%s(%s)", strings.ToUpper(match[1]), match[2])
+		if match := aggregateRegexp.FindStringSubmatch(v); match != nil {
+			argument := strings.TrimSpace(match[2])
+			if argument != "*" {
+				argument = quoteFieldIdentifier(argument)
+			}
+			v = fmt.Sprintf("%s(%s)", strings.ToUpper(match[1]), argument)
 		} else {
-			v = fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+			v = quoteFieldIdentifier(v)
 		}
 
 		res += v
 		resArray = append(resArray, v)
+		if alias != "" {
+			res += " AS " + alias
+		}
 	}
 	return
+}
+
+func quoteFieldIdentifier(identifier string) string {
+	identifier = strings.TrimSpace(identifier)
+	if len(identifier) >= 2 && identifier[0] == '"' && identifier[len(identifier)-1] == '"' {
+		identifier = strings.ReplaceAll(identifier[1:len(identifier)-1], `""`, `"`)
+	}
+	return fmt.Sprintf(`"%s"`, strings.ReplaceAll(identifier, `"`, `""`))
 }
 
 func parseFields(fields interface{}) (res string, resArray []string) {
@@ -339,6 +360,34 @@ func parseOffset(offset interface{}) (i int) {
 			i = v
 		case int32:
 			i = int(v)
+		}
+	}
+	return
+}
+
+func parseGroupBy(groupBy interface{}) (res string) {
+	if groupBy != nil {
+		switch t := groupBy.(type) {
+		case []string:
+			res, _ = _parseFields(t)
+		case string:
+			reg := regexp.MustCompile(`\s*,\s*`)
+			matches := reg.Split(t, -1)
+			if matches != nil {
+				res, _ = _parseFields(matches)
+			}
+		}
+	}
+	return
+}
+
+func parseHaving(having interface{}, args ...interface{}) (res string) {
+	switch t := having.(type) {
+	case string:
+		if len(args) != 0 {
+			res = NewWhere(t, args...)
+		} else {
+			res = t
 		}
 	}
 	return

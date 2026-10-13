@@ -3,7 +3,7 @@ module github.com/daostas/sdb
 go 1.25.0
 
 require (
-	github.com/daostas/query_parser v1.0.4
+	github.com/daostas/query_parser v1.0.6
 	github.com/daostas/slogger v1.1.0
 	github.com/jackc/pgx/v5 v5.11.0
 )
