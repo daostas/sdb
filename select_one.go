@@ -16,7 +16,7 @@ func (q SelectOneQuery[Out]) Fields(fields interface{}) SelectOneQuery[Out] {
 }
 
 func (q SelectOneQuery[Out]) Where(where interface{}, args ...interface{}) SelectOneQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 

@@ -16,7 +16,7 @@ func (q UpdateQuery[Out]) Values(values Map, params ...ValuesParam) UpdateQuery[
 }
 
 func (q UpdateQuery[Out]) Where(where interface{}, args ...interface{}) UpdateQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 

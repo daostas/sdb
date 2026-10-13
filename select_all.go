@@ -25,7 +25,7 @@ func (q SelectAllQuery[Out]) Orders(orders interface{}) SelectAllQuery[Out] {
 }
 
 func (q SelectAllQuery[Out]) Where(where interface{}, args ...interface{}) SelectAllQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 

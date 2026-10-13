@@ -20,7 +20,7 @@ func (q UpdateSelectOneMapQuery[Out]) Values(values Map, params ...ValuesParam) 
 }
 
 func (q UpdateSelectOneMapQuery[Out]) Where(where interface{}, args ...interface{}) UpdateSelectOneMapQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 

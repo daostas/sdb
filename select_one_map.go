@@ -16,7 +16,7 @@ func (q SelectOneMapQuery[Out]) Fields(fields interface{}) SelectOneMapQuery[Out
 }
 
 func (q SelectOneMapQuery[Out]) Where(where interface{}, args ...interface{}) SelectOneMapQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 

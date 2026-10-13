@@ -30,7 +30,7 @@ func (q UpsertSelectOneQuery[Out]) UpdateValues(values Map, params ...ValuesPara
 }
 
 func (q UpsertSelectOneQuery[Out]) Where(where interface{}, args ...interface{}) UpsertSelectOneQuery[Out] {
-	q.query.setWhere(where)
+	q.query.setWhere(where, args...)
 	return q
 }
 
