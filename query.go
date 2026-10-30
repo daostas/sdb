@@ -99,6 +99,8 @@ var (
 			updateSelectAll: true,
 			updateSelectOne: true,
 			upsert:          true,
+			upsertSelectOne: true,
+			upsertSelectAll: true,
 		},
 		"set": {
 			update:          true,
@@ -109,12 +111,18 @@ var (
 			createSelect:    true,
 			updateSelectAll: true,
 			updateSelectOne: true,
+			upsertSelectOne: true,
+			upsertSelectAll: true,
 		},
 		"on conflict": {
-			upsert: true,
+			upsert:          true,
+			upsertSelectOne: true,
+			upsertSelectAll: true,
 		},
 		"set1": {
-			upsert: true,
+			upsert:          true,
+			upsertSelectAll: true,
+			upsertSelectOne: true,
 		},
 	}
 )
