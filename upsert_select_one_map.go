@@ -4,7 +4,7 @@ type UpsertSelectOneMapQuery[Out any] struct {
 	query query[Out]
 }
 
-func UpsertSelectOneMap[Model ModelTable](db Sdb, model Model) (q UpsertSelectOneMapQuery[[]map[string]interface{}]) {
+func UpsertSelectOneMap[Model ModelTable](db Sdb, model Model) (q UpsertSelectOneMapQuery[map[string]interface{}]) {
 	q.query.setQuery(db, model, upsertSelectOne)
 	return
 }

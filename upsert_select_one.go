@@ -4,7 +4,7 @@ type UpsertSelectOneQuery[Out any] struct {
 	query query[Out]
 }
 
-func UpsertSelectOne[Model ModelTable](db Sdb, model Model) (q UpsertSelectOneQuery[[]*Model]) {
+func UpsertSelectOne[Model ModelTable](db Sdb, model Model) (q UpsertSelectOneQuery[Model]) {
 	q.query.setQuery(db, model, upsertSelectOne)
 	return
 }
