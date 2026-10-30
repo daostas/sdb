@@ -34,7 +34,7 @@ func (q UpsertSelectOneQuery[Out]) Where(where interface{}, args ...interface{})
 	return q
 }
 
-func (q UpsertSelectOneQuery[Out]) Exec() (err error) {
+func (q UpsertSelectOneQuery[Out]) Exec() (out Out, err error) {
 	_, err = q.query.exec()
 	return
 }
