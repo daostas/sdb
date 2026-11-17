@@ -35,6 +35,6 @@ func (q UpsertSelectOneMapQuery[Out]) Where(where interface{}, args ...interface
 }
 
 func (q UpsertSelectOneMapQuery[Out]) Exec() (out Out, err error) {
-	_, err = q.query.exec()
+	out, err = q.query.exec()
 	return
 }
